@@ -1,0 +1,2 @@
+# squirtleboss
+discord bot
