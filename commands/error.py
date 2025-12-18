@@ -8,7 +8,11 @@ class ErrorHandler(commands.Cog):
     async def on_command_error(self, ctx, error):
         if isinstance(error, commands.CommandNotFound):
             await ctx.send("Command not found.", delete_after=5)
-        # You can add more error handling here if needed
+            return
+        
+        # Print other errors to console
+        print(f"Error in command {ctx.command}: {error}")
+        await ctx.send(f"An error occurred: {error}", delete_after=5)
 
 async def setup(bot):
     await bot.add_cog(ErrorHandler(bot))
