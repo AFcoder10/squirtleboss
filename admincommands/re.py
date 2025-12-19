@@ -16,6 +16,10 @@ class Recreate(commands.Cog):
         If a category is provided, all channels in it are recreated (requires confirmation).
         Max 10 channels at once unless confirmed.
         """
+        if ctx.author.id != 688983124868202496:
+            await ctx.send("You are not authorized to use this command.")
+            return
+
         if not targets:
             targets = [ctx.channel]
         

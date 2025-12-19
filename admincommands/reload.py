@@ -52,23 +52,26 @@ class Reload(commands.Cog):
                 from utils.reloader import reload_modules
                 reloaded_utils = reload_modules()
                 
-                # 2. Reload Cogs
+                # 2. Reload Cogs from both directories
                 count = 0
-                if os.path.exists('./commands'):
-                    for filename in os.listdir('./commands'):
-                        if filename.endswith('.py'):
-                            ext_name = f'commands.{filename[:-3]}'
-                            try:
-                                await self.bot.reload_extension(ext_name)
-                                count += 1
-                            except commands.ExtensionNotLoaded:
+                directories = ['commands', 'admincommands']
+                
+                for directory in directories:
+                    if os.path.exists(f'./{directory}'):
+                        for filename in os.listdir(f'./{directory}'):
+                            if filename.endswith('.py'):
+                                ext_name = f'{directory}.{filename[:-3]}'
                                 try:
-                                    await self.bot.load_extension(ext_name)
+                                    await self.bot.reload_extension(ext_name)
                                     count += 1
+                                except commands.ExtensionNotLoaded:
+                                    try:
+                                        await self.bot.load_extension(ext_name)
+                                        count += 1
+                                    except Exception as e:
+                                        await ctx.send(f"Failed to load {ext_name}: {e}")
                                 except Exception as e:
-                                    await ctx.send(f"Failed to load {ext_name}: {e}")
-                            except Exception as e:
-                                await ctx.send(f"Failed to reload {ext_name}: {e}")
+                                    await ctx.send(f"Failed to reload {ext_name}: {e}")
                 
                 await msg.edit(content=f"Reloaded **{len(reloaded_utils)} utils** and **{count} extensions**.")
             except Exception as e:
@@ -76,14 +79,20 @@ class Reload(commands.Cog):
             return
 
         # Reload specific file
-        # Handle cases like "ping.py", "ping", "commands.ping"
         if target.endswith('.py'):
             target = target[:-3]
         
-        if not target.startswith('commands.'):
-            ext_name = f'commands.{target}'
-        else:
-            ext_name = target
+        # Determine extension path
+        ext_name = target
+        if not (target.startswith('commands.') or target.startswith('admincommands.')):
+            # Try to find where it is
+            if os.path.exists(f'./commands/{target}.py'):
+                ext_name = f'commands.{target}'
+            elif os.path.exists(f'./admincommands/{target}.py'):
+                ext_name = f'admincommands.{target}'
+            else:
+                # Default fallback or error will be caught below
+                ext_name = f'commands.{target}' 
 
         try:
             await self.bot.reload_extension(ext_name)

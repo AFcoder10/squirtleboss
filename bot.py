@@ -21,12 +21,19 @@ async def on_ready():
 
 async def main():
     async with bot:
-        # Load extensions
+        # Load extensions from commands
         if os.path.exists('./commands'):
             for filename in os.listdir('./commands'):
                 if filename.endswith('.py'):
                     await bot.load_extension(f'commands.{filename[:-3]}')
-                    print(f'Loaded extension: {filename}')
+                    print(f'Loaded extension: commands.{filename}')
+
+        # Load extensions from admincommands
+        if os.path.exists('./admincommands'):
+            for filename in os.listdir('./admincommands'):
+                if filename.endswith('.py'):
+                    await bot.load_extension(f'admincommands.{filename[:-3]}')
+                    print(f'Loaded extension: admincommands.{filename}')
         
         await bot.start(TOKEN)
 
