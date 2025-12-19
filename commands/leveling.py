@@ -94,7 +94,7 @@ class Leveling(commands.Cog):
         embed.description = description
         await ctx.send(embed=embed)
 
-    @commands.command()
+    @commands.command(hidden=True)
     @commands.has_permissions(administrator=True)
     async def set_levelup_log(self, ctx, channel: discord.TextChannel):
         set_levelup_channel(ctx.guild.id, channel.id)
