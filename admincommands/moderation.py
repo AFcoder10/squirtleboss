@@ -6,7 +6,7 @@ import json
 import os
 import time
 
-TEMP_BANS_FILE = "tempbans.json"
+TEMP_BANS_FILE = os.path.join("data", "tempbans.json")
 
 def load_tempbans():
     if not os.path.exists(TEMP_BANS_FILE):
@@ -199,7 +199,7 @@ class Moderation(commands.Cog):
     async def slowmode(self, ctx):
         """
         Base command for slowmode.
-        Usage: !slowmode set <time>
+        Usage: ?slowmode set <time>
         """
         await ctx.send_help(ctx.command)
 
@@ -208,8 +208,8 @@ class Moderation(commands.Cog):
     async def slowmode_set(self, ctx, time_str: str):
         """
         Sets the slowmode delay for the current channel.
-        Usage: !slowmode set <time>
-        Example: !slowmode set 10s
+        Usage: ?slowmode set <time>
+        Example: ?slowmode set 10s
         """
         duration = self.parse_time(time_str)
         if not duration:

@@ -3,9 +3,9 @@ from discord.ext import commands
 import json
 import os
 
-TICKET_FILE = 'tickets.json'
-TICKET_INFO_FILE = 'ticketinfo.json'
-SUPPORT_ROLE_ID = 1346473296866312224
+TICKET_FILE = os.path.join('data', 'tickets.json')
+TICKET_INFO_FILE = os.path.join('data', 'ticketinfo.json')
+
 
 def load_tickets_config():
     if not os.path.exists(TICKET_FILE):
@@ -90,9 +90,12 @@ class TicketLauncher(discord.ui.View):
         }
         
         # Add support role
-        support_role = interaction.guild.get_role(SUPPORT_ROLE_ID)
-        if support_role:
-            overwrites[support_role] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
+        support_role_id = config.get("support_role_id")
+        support_role = None
+        if support_role_id:
+            support_role = interaction.guild.get_role(support_role_id)
+            if support_role:
+                overwrites[support_role] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
         
         try:
             channel_name = f"ticket-{interaction.user.name}"
@@ -220,12 +223,24 @@ class Tickets(commands.Cog):
     async def set_ticketlog_channel(self, ctx, channel: discord.TextChannel):
         """
         Sets the channel where ticket logs will be sent. (Admin only)
-        Usage: !set_ticketlog_channel <channel>
+        Usage: ?set_ticketlog_channel <channel>
         """
         data = load_tickets_config()
         data["log_channel_id"] = channel.id
         save_tickets_config(data)
         await ctx.send(f"✅ Ticket log channel set to: {channel.mention}")
+
+    @commands.command(name='set_support_role', hidden=True)
+    @commands.has_permissions(administrator=True)
+    async def set_support_role(self, ctx, role: discord.Role):
+        """
+        Sets the support role that can access tickets. (Admin only)
+        Usage: ?set_support_role <role>
+        """
+        data = load_tickets_config()
+        data["support_role_id"] = role.id
+        save_tickets_config(data)
+        await ctx.send(f"✅ Support role set to: {role.name}")
 
     @commands.command(name='create_ticket', hidden=True)
     @commands.has_permissions(administrator=True)

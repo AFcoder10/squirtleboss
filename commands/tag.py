@@ -5,7 +5,7 @@ import os
 from datetime import datetime
 from utils.tagsearch import search_tags
 
-TAGS_FILE = 'tags.json'
+TAGS_FILE = os.path.join('data', 'tags.json')
 
 class TagPaginationView(discord.ui.View):
     def __init__(self, ctx, data, title, per_page=15):
@@ -96,13 +96,13 @@ class Tags(commands.Cog):
     async def tag(self, ctx, *, name: str = None):
         """
         Tag management system.
-        Usage: !tag <name> to view a tag.
+        Usage: ?tag <name> to view a tag.
         Subcommands: create, list, delete, search, raw, info, adelete.
         """
         if name is None:
             embed = discord.Embed(title="Tag Help", color=discord.Color.blue())
             embed.add_field(name="Commands", value="`create`, `list`, `delete`, `search`, `raw`, `info`, `adelete`")
-            embed.add_field(name="Usage", value="`!tag <name>` to view a tag.")
+            embed.add_field(name="Usage", value="`?tag <name>` to view a tag.")
             await ctx.send(embed=embed)
             return
 

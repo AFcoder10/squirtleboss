@@ -12,7 +12,7 @@ class Recreate(commands.Cog):
     async def re(self, ctx, targets: commands.Greedy[typing.Union[discord.CategoryChannel, discord.TextChannel, discord.VoiceChannel]] = None):
         """
         Deletes and recreates channels or categories.
-        Usage: !re [channel/category] ...
+        Usage: ?re [channel/category] ...
         If a category is provided, all channels in it are recreated (requires confirmation).
         Max 10 channels at once unless confirmed.
         """

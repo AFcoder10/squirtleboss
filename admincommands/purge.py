@@ -12,12 +12,12 @@ class Purge(commands.Cog):
         """
         Purge messages from the channel.
         Usage:
-        !purge <amount> - Delete the last <amount> messages.
-        !purge all - Delete all messages in the channel.
-        !purge @user <amount> - Delete up to <amount> messages from @user.
+        ?purge <amount> - Delete the last <amount> messages.
+        ?purge all - Delete all messages in the channel.
+        ?purge @user <amount> - Delete up to <amount> messages from @user.
         """
         if arg1 is None:
-            await ctx.send("Usage: !purge <amount> | !purge all | !purge @user [amount]", delete_after=3)
+            await ctx.send("Usage: ?purge <amount> | ?purge all | ?purge @user [amount]", delete_after=3)
             return
 
         limit = None

@@ -17,8 +17,8 @@ class Help(commands.Cog):
         """
         Shows this help message.
         Usage: 
-        !help - List all commands.
-        !help <command> - Show details for a specific command.
+        ?help - List all commands.
+        ?help <command> - Show details for a specific command.
         """
         
         if command_name:
@@ -28,7 +28,7 @@ class Help(commands.Cog):
                 await ctx.send("Command not found.")
                 return
             
-            embed = discord.Embed(title=f"Help: !{cmd.name}", description=cmd.help or "No description provided.", color=discord.Color.blue())
+            embed = discord.Embed(title=f"Help: ?{cmd.name}", description=cmd.help or "No description provided.", color=discord.Color.blue())
             
             # Aliases
             if cmd.aliases:
@@ -42,14 +42,14 @@ class Help(commands.Cog):
                 else:
                     params.append(f"[{name}]")
             
-            syntax = f"!{cmd.name} {' '.join(params)}"
+            syntax = f"?{cmd.name} {' '.join(params)}"
             embed.add_field(name="Usage", value=f"`{syntax}`", inline=False)
             
             await ctx.send(embed=embed)
             
         else:
             # Show all commands
-            embed = discord.Embed(title="🤖 Bot Commands", description="Type `!help <command>` for more info.", color=discord.Color.blurple())
+            embed = discord.Embed(title="🤖 Bot Commands", description="Type `?help <command>` for more info.", color=discord.Color.blurple())
             
             cogs = self.bot.cogs
             for cog_name, cog in cogs.items():

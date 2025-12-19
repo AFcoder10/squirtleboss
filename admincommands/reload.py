@@ -20,10 +20,10 @@ class Reload(commands.Cog):
         """
         Reloads a specific extension, all extensions, or restarts the bot.
         Usage: 
-        !reload all - Reloads all cogs and utils.
-        !reload bot - Restarts the bot process.
-        !reload utils - Reloads utility modules only.
-        !reload <filename> - Reloads a specific cog.
+        ?reload all - Reloads all cogs and utils.
+        ?reload bot - Restarts the bot process.
+        ?reload utils - Reloads utility modules only.
+        ?reload <filename> - Reloads a specific cog.
         """
         target = target.lower()
 

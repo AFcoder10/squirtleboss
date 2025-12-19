@@ -22,7 +22,7 @@ class Info(commands.Cog):
     async def userinfo(self, ctx, member: discord.Member = None):
         """
         Displays information about a user.
-        Usage: !userinfo [user]
+        Usage: ?userinfo [user]
         """
         member = member or ctx.author
         roles = [role.mention for role in member.roles if role != ctx.guild.default_role]
