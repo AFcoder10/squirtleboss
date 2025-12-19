@@ -98,7 +98,7 @@ class Moderation(commands.Cog):
     async def before_check_temp_bans(self):
         await self.bot.wait_until_ready()
 
-    @commands.command(name='warn')
+    @commands.command(name='warn', hidden=True)
     @commands.has_permissions(manage_messages=True)
     async def warn(self, ctx, member: discord.Member, *, reason: str = "No reason provided"):
         """
@@ -120,7 +120,7 @@ class Moderation(commands.Cog):
         except discord.Forbidden:
             await ctx.send(f"❌ Could not DM {member.mention}, but the warning has been noted.")
 
-    @commands.command(name='mute')
+    @commands.command(name='mute', hidden=True)
     @commands.has_permissions(moderate_members=True)
     async def mute(self, ctx, member: discord.Member, time_str: str, *, reason: str = "No reason provided"):
         """
@@ -163,7 +163,7 @@ class Moderation(commands.Cog):
         except Exception as e:
             await ctx.send(f"❌ Failed to mute user: {e}")
 
-    @commands.command(name='unmute')
+    @commands.command(name='unmute', hidden=True)
     @commands.has_permissions(moderate_members=True)
     async def unmute(self, ctx, member: discord.Member, *, reason: str = "No reason provided"):
         """
@@ -194,7 +194,7 @@ class Moderation(commands.Cog):
         except Exception as e:
             await ctx.send(f"❌ Failed to unmute user: {e}")
 
-    @commands.group(name='slowmode', invoke_without_command=True)
+    @commands.group(name='slowmode', invoke_without_command=True, hidden=True)
     @commands.has_permissions(manage_channels=True)
     async def slowmode(self, ctx):
         """
@@ -238,7 +238,7 @@ class Moderation(commands.Cog):
         except Exception as e:
             await ctx.send(f"❌ Failed to set slowmode: {e}")
 
-    @commands.command(name='kick')
+    @commands.command(name='kick', hidden=True)
     @commands.has_permissions(kick_members=True)
     async def kick(self, ctx, member: discord.Member, *, reason: str = "No reason provided"):
         """
@@ -266,7 +266,7 @@ class Moderation(commands.Cog):
         except Exception as e:
             await ctx.send(f"❌ Failed to kick user: {e}")
 
-    @commands.command(name='ban')
+    @commands.command(name='ban', hidden=True)
     @commands.has_permissions(ban_members=True)
     async def ban(self, ctx, member: discord.Member, *, reason: str = "No reason provided"):
         """
@@ -294,7 +294,7 @@ class Moderation(commands.Cog):
         except Exception as e:
             await ctx.send(f"❌ Failed to ban user: {e}")
 
-    @commands.command(name='temp_ban')
+    @commands.command(name='temp_ban', hidden=True)
     @commands.has_permissions(ban_members=True)
     async def temp_ban(self, ctx, member: discord.Member, time_str: str, *, reason: str = "No reason provided"):
         """
@@ -340,7 +340,7 @@ class Moderation(commands.Cog):
         except Exception as e:
             await ctx.send(f"❌ Failed to temp ban user: {e}")
 
-    @commands.command(name='unban')
+    @commands.command(name='unban', hidden=True)
     @commands.has_permissions(ban_members=True)
     async def unban(self, ctx, user_id: int, *, reason: str = "No reason provided"):
         """

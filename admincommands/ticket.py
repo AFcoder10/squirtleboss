@@ -203,7 +203,7 @@ class Tickets(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @commands.command(name='set_ticket_category')
+    @commands.command(name='set_ticket_category', hidden=True)
     @commands.has_permissions(administrator=True)
     async def set_ticket_category(self, ctx, category: discord.CategoryChannel):
         """
@@ -215,7 +215,7 @@ class Tickets(commands.Cog):
         save_tickets_config(data)
         await ctx.send(f"✅ Ticket category set to: {category.name}")
 
-    @commands.command(name='set_ticketlog_channel')
+    @commands.command(name='set_ticketlog_channel', hidden=True)
     @commands.has_permissions(administrator=True)
     async def set_ticketlog_channel(self, ctx, channel: discord.TextChannel):
         """
@@ -227,7 +227,7 @@ class Tickets(commands.Cog):
         save_tickets_config(data)
         await ctx.send(f"✅ Ticket log channel set to: {channel.mention}")
 
-    @commands.command(name='create_ticket')
+    @commands.command(name='create_ticket', hidden=True)
     @commands.has_permissions(administrator=True)
     async def create_ticket(self, ctx):
         """
@@ -241,7 +241,7 @@ class Tickets(commands.Cog):
         )
         await ctx.send(embed=embed, view=TicketLauncher())
 
-    @commands.command(name='close_ticket')
+    @commands.command(name='close_ticket', hidden=True)
     @commands.has_permissions(administrator=True)
     async def close_ticket_cmd(self, ctx, *, reason: str = "No reason provided"):
         """

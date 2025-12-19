@@ -15,7 +15,7 @@ class Reload(commands.Cog):
             return False
         return True
 
-    @commands.command(name='reload')
+    @commands.command(name='reload', hidden=True)
     async def reload(self, ctx, target: str):
         """
         Reloads a specific extension, all extensions, or restarts the bot.

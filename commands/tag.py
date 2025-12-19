@@ -160,7 +160,7 @@ class Tags(commands.Cog):
         self.save_tags()
         await ctx.send(embed=discord.Embed(title="Success", description=f"Tag `{name}` deleted.", color=discord.Color.green()))
 
-    @tag.command()
+    @tag.command(hidden=True)
     async def adelete(self, ctx, name: str):
         """(Admin) Delete any tag."""
         if not ctx.author.guild_permissions.manage_messages:

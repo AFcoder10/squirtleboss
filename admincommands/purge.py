@@ -6,7 +6,7 @@ class Purge(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @commands.command(name='purge')
+    @commands.command(name='purge', hidden=True)
     @commands.has_permissions(manage_messages=True)
     async def purge(self, ctx, arg1: typing.Optional[str] = None, arg2: typing.Optional[int] = None):
         """

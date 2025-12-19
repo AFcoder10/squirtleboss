@@ -7,7 +7,7 @@ class Recreate(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @commands.command(name='re')
+    @commands.command(name='re', hidden=True)
     @commands.has_permissions(manage_channels=True)
     async def re(self, ctx, targets: commands.Greedy[typing.Union[discord.CategoryChannel, discord.TextChannel, discord.VoiceChannel]] = None):
         """
