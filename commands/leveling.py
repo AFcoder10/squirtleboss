@@ -109,5 +109,24 @@ class Leveling(commands.Cog):
         elif isinstance(error, commands.BadArgument):
             await ctx.send("Invalid channel specified.")
 
+    @commands.command(hidden=True)
+    @commands.has_permissions(administrator=True)
+    async def setxp(self, ctx, member: discord.Member, amount: int):
+        """Sets a user's XP to a specific value."""
+        from utils.leveling_handler import set_user_xp
+        success = set_user_xp(ctx.guild.id, member.id, amount)
+        if success:
+             await ctx.send(f"Set {member.mention}'s XP to {amount}.")
+        else:
+             await ctx.send("Failed to set XP. Database error.")
+
+    @commands.command(hidden=True)
+    @commands.has_permissions(administrator=True)
+    async def givexp(self, ctx, member: discord.Member, amount: int):
+        """Gives a user a specific amount of XP."""
+        # We can use update_user_xp but checking for level up
+        new_val, leveled_up = update_user_xp(ctx.guild.id, member.id, amount)
+        await ctx.send(f"Gave {amount} XP to {member.mention}. They are now Level {new_val}.")
+
 async def setup(bot):
     await bot.add_cog(Leveling(bot))

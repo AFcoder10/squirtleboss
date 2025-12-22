@@ -21,6 +21,15 @@ bot = commands.Bot(command_prefix='?', intents=intents)
 @bot.event
 async def on_ready():
     print(f'{bot.user} has connected to Discord!')
+    
+    # Check Database Connection
+    import db
+    conn = db.get_connection()
+    if conn:
+        print("✅ Database connected successfully!")
+        conn.close()
+    else:
+        print("❌ Failed to connect to Database!")
 
 async def main():
     async with bot:
