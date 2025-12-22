@@ -97,7 +97,7 @@ def get_levelup_channel(guild_id):
     finally:
         conn.close()
 
-def update_user_xp(guild_id, user_id, xp_amount):
+def update_user_xp(guild_id, user_id, xp_amount, bypass_cooldown=False):
     conn = get_connection()
     if not conn:
         return 1, False
@@ -117,7 +117,7 @@ def update_user_xp(guild_id, user_id, xp_amount):
             xp, level, last_xp = 0, 1, 0
             
         # Check cooldown
-        if current_time - last_xp < 60:
+        if not bypass_cooldown and (current_time - last_xp < 60):
             return level, False
             
         xp += xp_amount

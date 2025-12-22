@@ -125,7 +125,7 @@ class Leveling(commands.Cog):
     async def givexp(self, ctx, member: discord.Member, amount: int):
         """Gives a user a specific amount of XP."""
         # We can use update_user_xp but checking for level up
-        new_val, leveled_up = update_user_xp(ctx.guild.id, member.id, amount)
+        new_val, leveled_up = update_user_xp(ctx.guild.id, member.id, amount, bypass_cooldown=True)
         await ctx.send(f"Gave {amount} XP to {member.mention}. They are now Level {new_val}.")
 
 async def setup(bot):
