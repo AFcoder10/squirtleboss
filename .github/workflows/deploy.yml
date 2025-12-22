@@ -20,4 +20,4 @@ jobs:
             git fetch origin
             git reset --hard origin/main
           fi
-          echo "✅ Deploy complete: $(git rev-parse HEAD)"
+          echo "✅ eploy complete: $(git rev-parse HEAD)"
