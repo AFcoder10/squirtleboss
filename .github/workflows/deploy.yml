@@ -23,11 +23,21 @@ jobs:
         EC2_USER: ${{ secrets.EC2_USER }}
       run: |
         ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes \
-          ${EC2_USER}@${EC2_HOST} "
-          cd /opt/squirtleboss || echo 'Folder not found, creating...' && git clone https://github.com/AFcoder10/squirtleboss.git /opt/squirtleboss
+          "${EC2_USER}@${EC2_HOST}" 'bash -s' << 'EOF'
+          # Ensure folder exists and has correct permissions
+          sudo mkdir -p /opt/squirtleboss
+          sudo chown ec2-user:ec2-user /opt/squirtleboss
+          
           cd /opt/squirtleboss
-          git fetch --all
-          git checkout main 2>/dev/null || git checkout master 2>/dev/null || true
-          git reset --hard origin/\$(git rev-parse --abbrev-ref HEAD)
-          echo 'Deploy complete: $(git rev-parse HEAD)'
-        "
+          
+          # Clone if not exists, otherwise pull
+          if [ ! -d ".git" ]; then
+            git clone https://github.com/AFcoder10/squirtleboss.git .
+            echo "Cloned fresh repo"
+          else
+            git fetch --all
+            git checkout main 2>/dev/null || git checkout master 2>/dev/null || true
+            git reset --hard origin/$(git rev-parse --abbrev-ref HEAD)
+            echo "Updated to latest commit: $(git rev-parse HEAD)"
+          fi
+        EOF
