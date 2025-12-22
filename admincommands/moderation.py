@@ -2,24 +2,11 @@ import discord
 from discord.ext import commands, tasks
 import re
 import datetime
-import json
-import os
 import time
+import db
 
-TEMP_BANS_FILE = os.path.join("data", "tempbans.json")
-
-def load_tempbans():
-    if not os.path.exists(TEMP_BANS_FILE):
-        return {"bans": []}
-    try:
-        with open(TEMP_BANS_FILE, 'r') as f:
-            return json.load(f)
-    except:
-        return {"bans": []}
-
-def save_tempbans(data):
-    with open(TEMP_BANS_FILE, 'w') as f:
-        json.dump(data, f, indent=4)
+def get_connection():
+    return db.get_connection()
 
 class Moderation(commands.Cog):
     def __init__(self, bot):
@@ -68,31 +55,40 @@ class Moderation(commands.Cog):
 
     @tasks.loop(seconds=60)
     async def check_temp_bans(self):
-        data = load_tempbans()
-        bans = data.get("bans", [])
-        now = time.time()
-        
-        remaining_bans = []
-        for ban in bans:
-            if now >= ban.get("end_time"):
-                # Ban expired, unban user
-                guild = self.bot.get_guild(ban.get("guild_id"))
+        conn = get_connection()
+        if not conn:
+            return
+
+        try:
+            cur = conn.cursor()
+            now = time.time()
+            
+            # Find expired bans
+            cur.execute("SELECT id, user_id, guild_id FROM tempbans WHERE end_time <= %s", (now,))
+            expired_bans = cur.fetchall()
+            
+            for ban_id, user_id, guild_id in expired_bans:
+                guild = self.bot.get_guild(guild_id)
                 if guild:
                     try:
-                        user = await self.bot.fetch_user(ban.get("user_id"))
+                        user = await self.bot.fetch_user(user_id)
                         await guild.unban(user, reason="Temp ban expired")
                         print(f"Unbanned {user} in {guild.name} (Expired)")
                         
                         # Try DMing
                         await self.send_dm(user, "Unbanned (Expired)", guild.name, "Temp ban duration ended.", discord.Color.green())
                     except Exception as e:
-                        print(f"Failed to unban user {ban.get('user_id')} in {guild.name}: {e}")
-            else:
-                remaining_bans.append(ban)
-        
-        if len(bans) != len(remaining_bans):
-            data["bans"] = remaining_bans
-            save_tempbans(data)
+                        print(f"Failed to unban user {user_id} in {guild.name}: {e}")
+            
+            # Delete expired bans
+            if expired_bans:
+                cur.execute("DELETE FROM tempbans WHERE end_time <= %s", (now,))
+                conn.commit()
+
+        except Exception as e:
+            print(f"Error checking temp bans: {e}")
+        finally:
+            conn.close()
 
     @check_temp_bans.before_loop
     async def before_check_temp_bans(self):
@@ -313,15 +309,20 @@ class Moderation(commands.Cog):
             
             await member.ban(reason=reason)
             
-            # Save to JSON
+            # Save to DB
             end_time = time.time() + duration.total_seconds()
-            data = load_tempbans()
-            data["bans"].append({
-                "user_id": member.id,
-                "guild_id": ctx.guild.id,
-                "end_time": end_time
-            })
-            save_tempbans(data)
+            
+            conn = get_connection()
+            if conn:
+                try:
+                    cur = conn.cursor()
+                    cur.execute("INSERT INTO tempbans (user_id, guild_id, end_time) VALUES (%s, %s, %s)", 
+                            (member.id, ctx.guild.id, end_time))
+                    conn.commit()
+                except Exception as db_e:
+                     print(f"Error saving temp ban: {db_e}")
+                finally:
+                    conn.close()
 
             embed = discord.Embed(
                 title="⏳ User Temp Banned",
@@ -352,11 +353,16 @@ class Moderation(commands.Cog):
             await ctx.guild.unban(user, reason=reason)
             
             # Remove from tempbans if exists
-            data = load_tempbans()
-            original_len = len(data["bans"])
-            data["bans"] = [b for b in data["bans"] if not (b["user_id"] == user_id and b["guild_id"] == ctx.guild.id)]
-            if len(data["bans"]) != original_len:
-                save_tempbans(data)
+            conn = get_connection()
+            if conn:
+                try:
+                   cur = conn.cursor()
+                   cur.execute("DELETE FROM tempbans WHERE user_id = %s AND guild_id = %s", (user_id, ctx.guild.id))
+                   conn.commit()
+                except Exception as db_e:
+                    print(f"Error removing temp ban: {db_e}")
+                finally:
+                    conn.close()
             
             # DM after action (might fail if no shared servers)
             dm_sent = await self.send_dm(user, "Unbanned", ctx.guild.name, reason, discord.Color.green())

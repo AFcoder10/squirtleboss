@@ -1,121 +1,176 @@
-import json
-import os
+import db
 import math
 import time
 
-DATA_PATH = os.path.join(os.getcwd(), 'data', 'levels.json')
-
-def load_data():
-    if not os.path.exists(DATA_PATH):
-        return {}
-    try:
-        with open(DATA_PATH, 'r') as f:
-            return json.load(f)
-    except (json.JSONDecodeError, FileNotFoundError):
-        return {}
-
-def save_data(data):
-    # Atomic save to prevent corruption
-    temp_path = DATA_PATH + '.tmp'
-    with open(temp_path, 'w') as f:
-        json.dump(data, f, indent=4)
-    os.replace(temp_path, DATA_PATH)
-
-def get_user_data(guild_id, user_id):
-    data = load_data()
-    guild_id = str(guild_id)
-    user_id = str(user_id)
-    
-    if guild_id not in data:
-        return None
-    if user_id not in data[guild_id]:
-        return None
-        
-    return data[guild_id][user_id]
+def get_connection():
+    return db.get_connection()
 
 def calculate_xp_for_level(level):
     # Formula: 5 * (level ^ 2) + 50 * level + 100
     return 5 * (level ** 2) + 50 * level + 100
 
+def get_user_data(guild_id, user_id):
+    conn = get_connection()
+    if not conn:
+        return None
+        
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT xp, level, last_xp FROM levels WHERE guild_id = %s AND user_id = %s", (guild_id, user_id))
+        row = cur.fetchone()
+        
+        if row:
+            return {
+                'xp': row[0],
+                'level': row[1],
+                'last_xp': row[2]
+            }
+        return None
+    except Exception as e:
+        print(f"Error getting user data: {e}")
+        return None
+    finally:
+        conn.close()
+
 def get_leaderboard(guild_id, limit=10):
-    data = load_data()
-    guild_id = str(guild_id)
-    
-    if guild_id not in data:
+    conn = get_connection()
+    if not conn:
         return []
         
-    # Filter out non-user keys like "levelup_channel"
-    users = []
-    for user_id, user_data in data[guild_id].items():
-        if isinstance(user_data, dict) and 'xp' in user_data:
-            users.append({'user_id': user_id, **user_data})
-            
-    # Sort by XP descending
-    users.sort(key=lambda x: x['xp'], reverse=True)
-    return users[:limit]
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT user_id, xp, level, last_xp 
+            FROM levels 
+            WHERE guild_id = %s 
+            ORDER BY xp DESC 
+            LIMIT %s
+        """, (guild_id, limit))
+        rows = cur.fetchall()
+        
+        users = []
+        for row in rows:
+            users.append({
+                'user_id': str(row[0]),
+                'xp': row[1],
+                'level': row[2],
+                'last_xp': row[3]
+            })
+        return users
+    except Exception as e:
+        print(f"Error getting leaderboard: {e}")
+        return []
+    finally:
+        conn.close()
 
 def set_levelup_channel(guild_id, channel_id):
-    data = load_data()
-    guild_id = str(guild_id)
-    
-    if guild_id not in data:
-        data[guild_id] = {}
-        
-    data[guild_id]['levelup_channel'] = channel_id
-    save_data(data)
+    conn = get_connection()
+    if not conn:
+        return
+
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            INSERT INTO guild_config (guild_id, levelup_channel_id)
+            VALUES (%s, %s)
+            ON CONFLICT (guild_id) DO UPDATE SET levelup_channel_id = EXCLUDED.levelup_channel_id
+        """, (guild_id, channel_id))
+        conn.commit()
+    except Exception as e:
+        print(f"Error setting levelup channel: {e}")
+    finally:
+        conn.close()
 
 def get_levelup_channel(guild_id):
-    data = load_data()
-    guild_id = str(guild_id)
-    return data.get(guild_id, {}).get('levelup_channel')
+    conn = get_connection()
+    if not conn:
+        return None
+        
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT levelup_channel_id FROM guild_config WHERE guild_id = %s", (guild_id,))
+        row = cur.fetchone()
+        return row[0] if row else None
+    except Exception as e:
+        print(f"Error getting levelup channel: {e}")
+        return None
+    finally:
+        conn.close()
 
 def update_user_xp(guild_id, user_id, xp_amount):
-    data = load_data()
-    guild_id = str(guild_id)
-    user_id = str(user_id)
-    
-    if guild_id not in data:
-        data[guild_id] = {}
+    conn = get_connection()
+    if not conn:
+        return 1, False
         
-    if user_id not in data[guild_id]:
-        data[guild_id][user_id] = {
-            'xp': 0,
-            'level': 1,
-            'last_xp': 0
-        }
-    
-    user_data = data[guild_id][user_id]
-    
-    # Check cooldown
-    current_time = time.time()
-    if current_time - user_data.get('last_xp', 0) < 60:
-        return user_data['level'], False
+    try:
+        cur = conn.cursor()
         
-    user_data['xp'] += xp_amount
-    user_data['last_xp'] = current_time
-    
-    # Check for level up
-    current_level = user_data['level']
-    xp_needed = calculate_xp_for_level(current_level)
-    
-    leveled_up = False
-    if user_data['xp'] >= xp_needed:
-        user_data['level'] += 1
-        # Subtract XP cost or keep cumulative? Usually cumulative is better for leaderboards, 
-        # but formula implies "XP needed for NEXT level".
-        # If we keep total XP, we just check against the threshold for CURRENT level.
-        # Let's assume cumulative XP model based on "rank level and xp".
-        leveled_up = True
+        # Get current data or initialize
+        cur.execute("SELECT xp, level, last_xp FROM levels WHERE guild_id = %s AND user_id = %s", (guild_id, user_id))
+        row = cur.fetchone()
         
-    save_data(data)
-    return user_data['level'], leveled_up
+        current_time = time.time()
+        
+        if row:
+            xp, level, last_xp = row
+        else:
+            xp, level, last_xp = 0, 1, 0
+            
+        # Check cooldown
+        if current_time - last_xp < 60:
+            return level, False
+            
+        xp += xp_amount
+        last_xp = current_time
+        
+        # Check for level up
+        xp_needed = calculate_xp_for_level(level)
+        leveled_up = False
+        
+        if xp >= xp_needed:
+            level += 1
+            leveled_up = True
+            
+        # Upsert
+        cur.execute("""
+            INSERT INTO levels (guild_id, user_id, xp, level, last_xp)
+            VALUES (%s, %s, %s, %s, %s)
+            ON CONFLICT (guild_id, user_id) DO UPDATE SET
+                xp = EXCLUDED.xp,
+                level = EXCLUDED.level,
+                last_xp = EXCLUDED.last_xp
+        """, (guild_id, user_id, xp, level, last_xp))
+        conn.commit()
+        
+        return level, leveled_up
+        
+    except Exception as e:
+        print(f"Error updating user XP: {e}")
+        return 1, False
+    finally:
+        conn.close()
 
 def get_rank(guild_id, user_id):
-    leaderboard = get_leaderboard(guild_id, limit=999999) # Get all users
-    user_id = str(user_id)
+    conn = get_connection()
+    if not conn:
+        return None
     
-    for index, entry in enumerate(leaderboard):
-        if entry['user_id'] == user_id:
-            return index + 1
-            
-    return None
+    try:
+        # Calculate rank using SQL window function or count
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT rank FROM (
+                SELECT user_id, RANK() OVER (ORDER BY xp DESC) as rank 
+                FROM levels 
+                WHERE guild_id = %s
+            ) as ranked_users
+            WHERE user_id = %s
+        """, (guild_id, user_id))
+        
+        row = cur.fetchone()
+        return row[0] if row else None
+    except Exception as e:
+        print(f"Error getting rank: {e}")
+        return None
+    finally:
+        conn.close()

@@ -1,34 +1,118 @@
 import discord
 from discord.ext import commands
-import json
-import os
+import db
+import asyncio
 
-TICKET_FILE = os.path.join('data', 'tickets.json')
-TICKET_INFO_FILE = os.path.join('data', 'ticketinfo.json')
-
+# Helper to get DB connection
+def get_connection():
+    return db.get_connection()
 
 def load_tickets_config():
-    if not os.path.exists(TICKET_FILE):
+    conn = get_connection()
+    if not conn:
         return {}
-    with open(TICKET_FILE, 'r') as f:
-        return json.load(f)
+    
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT category_id, log_channel_id, support_role_id FROM ticket_config WHERE uniq_id = 1")
+        row = cur.fetchone()
+        if row:
+            return {
+                "category_id": row[0],
+                "log_channel_id": row[1],
+                "support_role_id": row[2]
+            }
+        return {}
+    except Exception as e:
+        print(f"Error loading ticket config: {e}")
+        return {}
+    finally:
+        conn.close()
 
 def save_tickets_config(data):
-    with open(TICKET_FILE, 'w') as f:
-        json.dump(data, f, indent=4)
+    # This function is now slightly different, we update individual fields or upsert
+    conn = get_connection()
+    if not conn:
+        return
 
-def load_ticket_info():
-    if not os.path.exists(TICKET_INFO_FILE):
-        return {"active_tickets": {}}
     try:
-        with open(TICKET_INFO_FILE, 'r') as f:
-            return json.load(f)
-    except:
-        return {"active_tickets": {}}
+        cur = conn.cursor()
+        cur.execute("""
+            INSERT INTO ticket_config (uniq_id, category_id, log_channel_id, support_role_id)
+            VALUES (1, %s, %s, %s)
+            ON CONFLICT (uniq_id) DO UPDATE SET
+                category_id = EXCLUDED.category_id,
+                log_channel_id = EXCLUDED.log_channel_id,
+                support_role_id = EXCLUDED.support_role_id
+        """, (
+            data.get("category_id"),
+            data.get("log_channel_id"),
+            data.get("support_role_id")
+        ))
+        conn.commit()
+    except Exception as e:
+        print(f"Error saving ticket config: {e}")
+    finally:
+        conn.close()
 
-def save_ticket_info(data):
-    with open(TICKET_INFO_FILE, 'w') as f:
-        json.dump(data, f, indent=4)
+def get_active_ticket(user_id):
+    conn = get_connection()
+    if not conn:
+        return None
+        
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT channel_id FROM active_tickets WHERE user_id = %s", (user_id,))
+        row = cur.fetchone()
+        return row[0] if row else None
+    except Exception as e:
+        print(f"Error getting active ticket: {e}")
+        return None
+    finally:
+        conn.close()
+
+def add_active_ticket(user_id, channel_id):
+    conn = get_connection()
+    if not conn:
+        return
+
+    try:
+        cur = conn.cursor()
+        cur.execute("INSERT INTO active_tickets (user_id, channel_id) VALUES (%s, %s)", (user_id, channel_id))
+        conn.commit()
+    except Exception as e:
+        print(f"Error adding active ticket: {e}")
+    finally:
+        conn.close()
+
+def remove_active_ticket(channel_id):
+    conn = get_connection()
+    if not conn:
+        return
+
+    try:
+        cur = conn.cursor()
+        cur.execute("DELETE FROM active_tickets WHERE channel_id = %s", (channel_id,))
+        conn.commit()
+    except Exception as e:
+        print(f"Error removing active ticket: {e}")
+    finally:
+        conn.close()
+
+def is_channel_ticket(channel_id):
+    conn = get_connection()
+    if not conn:
+        return False
+        
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT 1 FROM active_tickets WHERE channel_id = %s", (channel_id,))
+        return cur.fetchone() is not None
+    except Exception as e:
+        print(f"Error checking ticket channel: {e}")
+        return False
+    finally:
+        conn.close()
 
 async def log_ticket_event(guild, title, description, color, fields=None):
     config = load_tickets_config()
@@ -65,22 +149,33 @@ class TicketLauncher(discord.ui.View):
             await interaction.response.send_message("❌ Ticket category not found. Please contact an admin.", ephemeral=True)
             return
             
-        # Check active tickets in ticketinfo.json
-        info = load_ticket_info()
-        user_id = str(interaction.user.id)
-        active_tickets = info.get("active_tickets", {})
+        # Check active tickets
+        existing_channel_id = get_active_ticket(interaction.user.id)
         
-        if user_id in active_tickets:
-            existing_channel_id = active_tickets[user_id]
+        if existing_channel_id:
             existing_channel = interaction.guild.get_channel(existing_channel_id)
             
             if existing_channel:
                 await interaction.response.send_message(f"❌ You already have an open ticket: {existing_channel.mention}", ephemeral=True)
                 return
             else:
-                # Channel deleted manually? cleanup
-                del active_tickets[user_id]
-                save_ticket_info(info)
+                # Channel deleted manually? cleanup based on user id isn't direct in DB with helper, but add_active_ticket will fail if PK exists?
+                # Actually, if existing_channel is None, it means the channel is gone.
+                # But get_active_ticket returned an ID. So we should remove it.
+                # We need a remove by user_id or handle it. 
+                # Let's add that helper to be safe or just use raw delete here?
+                # For cleaner code, assume remove_active_ticket only takes channel_id as per API above.
+                # We can't remove by user_id with current helper.
+                # Let's just try to create and cleaner logic:
+                conn = get_connection()
+                try:
+                    cur = conn.cursor()
+                    cur.execute("DELETE FROM active_tickets WHERE user_id = %s", (interaction.user.id,))
+                    conn.commit()
+                except:
+                    pass
+                finally:
+                    if conn: conn.close()
 
         # Permissions
         overwrites = {
@@ -101,10 +196,8 @@ class TicketLauncher(discord.ui.View):
             channel_name = f"ticket-{interaction.user.name}"
             ticket_channel = await interaction.guild.create_text_channel(channel_name, category=category, overwrites=overwrites)
             
-            # Update ticketinfo.json BEFORE sending messages to ensure state is saved
-            info = load_ticket_info() # Reload to be safe
-            info.setdefault("active_tickets", {})[str(interaction.user.id)] = ticket_channel.id
-            save_ticket_info(info)
+            # Save to DB
+            add_active_ticket(interaction.user.id, ticket_channel.id)
 
             embed = discord.Embed(
                 title="🎫 Support Ticket",
@@ -136,21 +229,6 @@ class TicketLauncher(discord.ui.View):
             await interaction.response.send_message(f"❌ Failed to create ticket: {e}", ephemeral=True)
 
 
-def cleanup_ticket(channel_id):
-    info = load_ticket_info()
-    active_tickets = info.get("active_tickets", {})
-    
-    # Find user by channel_id
-    user_id_to_remove = None
-    for uid, cid in active_tickets.items():
-        if cid == channel_id:
-            user_id_to_remove = uid
-            break
-    
-    if user_id_to_remove:
-        del active_tickets[user_id_to_remove]
-        save_ticket_info(info)
-
 class TicketCloseModal(discord.ui.Modal, title="Close Ticket"):
     reason = discord.ui.TextInput(
         label="Reason for closing",
@@ -175,10 +253,9 @@ class TicketCloseModal(discord.ui.Modal, title="Close Ticket"):
              ("Reason", reason_text, False)]
         )
 
-        import asyncio
         await asyncio.sleep(5)
         
-        cleanup_ticket(interaction.channel.id)
+        remove_active_ticket(interaction.channel.id)
 
         await interaction.channel.delete(reason=f"Ticket closed by {interaction.user}: {reason_text}")
 
@@ -190,12 +267,7 @@ class TicketControls(discord.ui.View):
     @discord.ui.button(label="Close Ticket", style=discord.ButtonStyle.red, custom_id="ticket:close", emoji="🔒")
     async def close_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
         # Validate that this is a registered ticket
-        info = load_ticket_info()
-        active_tickets = info.get("active_tickets", {})
-        search_id = interaction.channel.id
-        is_ticket = any(ticket_id == search_id for ticket_id in active_tickets.values())
-        
-        if not is_ticket:
+        if not is_channel_ticket(interaction.channel.id):
             await interaction.response.send_message("❌ This channel is not in the ticket database. I cannot close it via this button.", ephemeral=True)
             return
 
@@ -264,14 +336,7 @@ class Tickets(commands.Cog):
         Usage: !close_ticket [reason]
         """
         # Validate that this is a registered ticket
-        info = load_ticket_info()
-        active_tickets = info.get("active_tickets", {})
-        
-        # Check if current channel ID is in the values of active_tickets
-        search_id = ctx.channel.id
-        is_ticket = any(ticket_id == search_id for ticket_id in active_tickets.values())
-        
-        if not is_ticket:
+        if not is_channel_ticket(ctx.channel.id):
             await ctx.send("❌ This channel is not a registered ticket. I cannot close it.")
             return
 
@@ -288,10 +353,9 @@ class Tickets(commands.Cog):
              ("Reason", reason, False)]
         )
 
-        import asyncio
         await asyncio.sleep(5)
         
-        cleanup_ticket(ctx.channel.id)
+        remove_active_ticket(ctx.channel.id)
 
         await ctx.channel.delete(reason=f"Ticket closed by {ctx.author}: {reason}")
 
