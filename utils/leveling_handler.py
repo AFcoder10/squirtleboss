@@ -167,6 +167,7 @@ def get_rank(guild_id, user_id):
             WHERE user_id = %s
         """, (guild_id, user_id))
         
+        row = cur.fetchone()
         return row[0] if row else None
     except Exception as e:
         print(f"Error getting rank: {e}")
