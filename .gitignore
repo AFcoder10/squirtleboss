@@ -1,3 +1,5 @@
 .env
 /.venv
 POKEDIA.pem
+test.py
+data/levels.json
