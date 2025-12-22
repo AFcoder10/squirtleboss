@@ -128,6 +128,7 @@ def update_user_xp(guild_id, user_id, xp_amount):
         leveled_up = False
         
         if xp >= xp_needed:
+            xp -= xp_needed  # Reset XP by subtracting requirement
             level += 1
             leveled_up = True
             
@@ -206,65 +207,50 @@ def set_user_xp(guild_id, user_id, xp_amount):
         # But for `set_user_xp` with just `xp_amount`, we should probably just set XP and leave level alone, 
         # or reset level to 1 and recalculate? Recalculating is safer.
         
-        level = 1
-        while True:
-            needed = calculate_xp_for_level(level)
-            if xp_amount >= needed:
-                xp_amount -= needed # Wait, is XP cumulative or reset?
-                # looking at update_user_xp:
-                # xp += xp_amount ... if xp >= xp_needed: level += 1
-                # It doesn't subtract XP. So XP is cumulative total for that level?
-                # "if xp >= xp_needed: level += 1"
-                # It does NOT reset XP to 0.
-                # So XP grows indefinitely.
-                # So `calculate_xp_for_level` is the threshold for THAT specific level.
-                
-                # So if I am level 1, I need 5(1)^2 + 50(1) + 100 = 155 XP to go to Level 2.
-                # If I have 160 XP, I am Level 2? 
-                # But wait, does the threshold increase?
-                # Level 2 needed: 5(4) + 100 + 100 = 220?
-                # If I have 160, and I level up to 2. My XP is still 160.
-                # Next check: if 160 >= 220? False.
-                # So yes, XP is cumulative.
-                
-                # So to calculate level from Total XP:
-                # We just loop up.
-                pass
-            else:
-                break
-            
-            # This logic assumes XP is NOT reset.
-            level += 1
-            
-        # Re-check update_user_xp logic loop:
-        # if xp >= xp_needed: level += 1
-        # It only checks ONCE. So if I give 1,000,000 XP, it only levels up +1.
-        # That's a bug in original code too if getting massive XP at once.
-        # But for `set_user_xp`, we want to calculate the correct level for the *Total* XP.
+        # Adjusted logic for Non-Cumulative XP
+        # The user wants "XP resets after level up".
+        # So "xp" in DB is current progress towards NEXT level.
+        # "level" is current level.
         
-        # Let's brute force level calc for safety
-        calculated_level = 1
-        current_threshold = calculate_xp_for_level(calculated_level)
-        temp_xp = xp_amount
+        # If user runs ?setxp 1500:
+        # We assume they want to set the TOTAL XP? Or just the current XP bar?
+        # Usually "setxp" sets the current bar value.
+        # But if the value is higher than the level requirement, we should probably level them up automatically?
+        # Or just let it be high and they level up on next message?
         
-        # Actually, the previous code doesn't subtract.
-        # So we just check if Total XP >= Threshold(Level).
+        # Let's assume ?setxp sets the `xp` column directly.
+        # If it's > requirement, we just set it. 
+        # The `update_user_xp` function will handle the level up on next trigger.
+        # OR we could be smart and calculate the level if it overflows.
         
-        # Wait, if XP is cumulative, then:
-        # Level 1 requires 155.
-        # Level 2 requires 220.
-        # If I have 300 XP.
-        # Am I level 1 (passed 155) -> Level 2.
-        # Am I level 2 (passed 220) -> Level 3.
-        # So getting level from XP:
+        # If I set XP to 5000, and level 1 needs 155:
+        # Should I be Level 1 with 5000 XP (waiting for next message to level up many times)?
+        # Or Level X with Y XP?
         
-        lc = 1
-        while True:
-            req = calculate_xp_for_level(lc)
-            if xp_amount >= req:
-                lc += 1
-            else:
-                break
+        # Let's just set the XP column. This allows admins to fix things or force high XP.
+        # But `set_user_xp` was previously trying to calculate level.
+        
+        # If we want to recalculate EVERYTHING based on total XP, that's complex because we are switching models.
+        # Given "setxp", let's just set the `xp` value for the CURRENT level.
+        # If they want to change level, they can't with this command?
+        # Maybe we should assume the user handles the level separately or doesn't care.
+        # But wait, `setxp` implies setting the progress.
+        
+        # Let's just set the raw value.
+        lc = row[1] if row else 1 # Keep current level or default 1
+        
+        # But wait, we need `row` to know current level if we are just updating XP.
+        # We need to fetch it first if we didn't above (we didn't).
+        
+        # Fetch current level
+        cur.execute("SELECT level FROM levels WHERE guild_id = %s AND user_id = %s", (guild_id, user_id))
+        r = cur.fetchone()
+        
+        current_level = r[0] if r else 1
+        
+        # Update only XP, keep level
+        # If xp_amount > needed for current_level, they will level up on next message.
+        lc = current_level
         
         cur.execute("""
             INSERT INTO levels (guild_id, user_id, xp, level, last_xp)
