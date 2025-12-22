@@ -2,22 +2,24 @@ name: Deploy to EC2
 on:
   push:
     branches: [ main ]
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-    - name: Deploy
-      uses: appleboy/ssh-action@v1.0.3
-      with:
-        host: ${{ secrets.EC2_HOST }}
-        username: ${{ secrets.EC2_USER }}
-        key: ${{ secrets.EC2_SSH_KEY }}
-        script: |
-          mkdir -p ~/squirtleboss && cd ~/squirtleboss
-          if [ ! -d .git ]; then 
-            git clone https://github.com/AFcoder10/squirtleboss.git .
-          else 
-            git fetch origin
-            git reset --hard origin/main
-          fi
-          echo "✅ eploy complete: $(git rev-parse HEAD)"
+      - name: Deploy
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            mkdir -p ~/squirtleboss && cd ~/squirtleboss
+            if [ ! -d .git ]; then
+              git clone https://github.com/AFcoder10/squirtleboss.git .
+              echo "Fresh clone"
+            else
+              git fetch origin
+              git reset --hard origin/main
+              echo "Update: $(git rev-parse HEAD)"
+            fi
