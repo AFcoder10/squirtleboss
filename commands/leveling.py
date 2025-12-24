@@ -51,15 +51,8 @@ class Leveling(commands.Cog):
         next_level_xp = calculate_xp_for_level(level)
         
         # Calculate progress
-        # XP for current level start (approximate, to show progress bar correctly)
-        # Ideally we'd know the XP required for the PREVIOUS level to show a bar from 0% to 100% of the current level.
-        # But our formula is cumulative?
-        # create_xp_for_level(level) returns limit for THAT level.
-        # So previous level limit is calculate_xp_for_level(level - 1).
-        
-        prev_level_xp = calculate_xp_for_level(level - 1) if level > 1 else 0
-        xp_towards_next = xp - prev_level_xp
-        xp_needed_for_next = next_level_xp - prev_level_xp
+        xp_towards_next = xp
+        xp_needed_for_next = next_level_xp
         
         # Progress bar
         boxes = 10

@@ -43,7 +43,7 @@ def get_leaderboard(guild_id, limit=10):
             SELECT user_id, xp, level, last_xp 
             FROM levels 
             WHERE guild_id = %s 
-            ORDER BY xp DESC 
+            ORDER BY level DESC, xp DESC 
             LIMIT %s
         """, (guild_id, limit))
         rows = cur.fetchall()
@@ -121,16 +121,18 @@ def update_user_xp(guild_id, user_id, xp_amount, bypass_cooldown=False):
             return level, False
             
         xp += xp_amount
-        last_xp = current_time
+        if not bypass_cooldown:
+            last_xp = current_time
         
         # Check for level up
         xp_needed = calculate_xp_for_level(level)
         leveled_up = False
         
-        if xp >= xp_needed:
+        while xp >= xp_needed:
             xp -= xp_needed  # Reset XP by subtracting requirement
             level += 1
             leveled_up = True
+            xp_needed = calculate_xp_for_level(level)  # Recalculate for next level
             
         # Upsert
         cur.execute("""
@@ -161,7 +163,7 @@ def get_rank(guild_id, user_id):
         cur = conn.cursor()
         cur.execute("""
             SELECT rank FROM (
-                SELECT user_id, RANK() OVER (ORDER BY xp DESC) as rank 
+                SELECT user_id, RANK() OVER (ORDER BY level DESC, xp DESC) as rank 
                 FROM levels 
                 WHERE guild_id = %s
             ) as ranked_users
