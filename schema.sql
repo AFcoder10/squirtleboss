@@ -39,3 +39,8 @@ CREATE TABLE IF NOT EXISTS tempbans (
     guild_id BIGINT,
     end_time DOUBLE PRECISION
 );
+
+CREATE TABLE IF NOT EXISTS vouches (
+    user_id BIGINT PRIMARY KEY,
+    score INTEGER DEFAULT 0
+);
