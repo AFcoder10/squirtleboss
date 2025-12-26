@@ -1,9 +1,9 @@
-name: Deploy to Amazon Linux 2023
+name: Sync to EC2
 
 on:
   push:
     branches:
-      - main  # Only deploy when you push to main
+      - main
 
 jobs:
   deploy:
@@ -12,8 +12,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # Step 1: Upload files to the home directory
-      - name: Copy files via SCP
+      - name: Sync files to EC2
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.HOST_DNS }}
@@ -21,6 +20,8 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
           port: 22
           source: "."
-          # This puts everything inside /home/ec2-user/app
-          target: "/home/ec2-user/app" 
+          target: "/home/ec2-user/app"
+          # Optional: set rm to true if you want to delete 
+          # old files in the target folder before uploading new ones
+          rm: false 
           strip_components: 0
