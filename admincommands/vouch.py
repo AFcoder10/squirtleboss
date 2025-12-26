@@ -8,16 +8,39 @@ import asyncio
 CONFIG_FILE = 'data/vouch_config.json'
 
 class VouchRequestView(discord.ui.View):
-    def __init__(self, bot, user_id, target_id, action, reason, proof_urls):
+    def __init__(self, bot):
         super().__init__(timeout=None)
         self.bot = bot
-        self.user_id = user_id
-        self.target_id = target_id
-        self.action = action # 'vouch' or 'unvouch'
-        self.reason = reason
-        self.proof_urls = proof_urls
 
-    async def update_score(self, guild_id, value):
+    def get_info_from_embed(self, embed):
+        if not embed or not embed.description:
+            return None, None, None, None, []
+        
+        # Parse IDs
+        import re
+        # Description: **Requester:** <@id> (`id`)\n**Target:** <@id> (`id`)
+        requester_match = re.search(r"Requester:\*\* .* \(`(\d+)`\)", embed.description)
+        target_match = re.search(r"Target:\*\* .* \(`(\d+)`\)", embed.description)
+        
+        requester_id = int(requester_match.group(1)) if requester_match else None
+        target_id = int(target_match.group(1)) if target_match else None
+        
+        # Parse Action from Title
+        action = 'vouch' if 'Vouch' in embed.title else 'unvouch'
+        
+        # Parse Reason and Proof
+        reason = "No reason provided"
+        proof_urls = []
+        
+        for field in embed.fields:
+            if field.name == "Reason":
+                reason = field.value
+            elif field.name == "Proof":
+                proof_urls = field.value.split('\n')
+                
+        return requester_id, target_id, action, reason, proof_urls
+
+    async def update_score(self, guild_id, target_id, value):
         conn = db.get_connection()
         if not conn:
             return None
@@ -29,7 +52,7 @@ class VouchRequestView(discord.ui.View):
                 ON CONFLICT (user_id) 
                 DO UPDATE SET score = vouches.score + %s 
                 RETURNING score
-            """, (self.target_id, value, value))
+            """, (target_id, value, value))
             new_score = cur.fetchone()[0]
             conn.commit()
             return new_score
@@ -41,48 +64,69 @@ class VouchRequestView(discord.ui.View):
 
     @discord.ui.button(label="Approve", style=discord.ButtonStyle.green, custom_id="vouch_approve")
     async def approve(self, interaction: discord.Interaction, button: discord.ui.Button):
-        value = 1 if self.action == 'vouch' else -1
-        new_score = await self.update_score(interaction.guild_id, value)
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message("❌ Only admins can assume this action.", ephemeral=True)
+            return
+
+        embed = interaction.message.embeds[0]
+        requester_id, target_id, action, reason, proof_urls = self.get_info_from_embed(embed)
+        
+        if not requester_id or not target_id:
+            await interaction.response.send_message("❌ Error parsing request data.", ephemeral=True)
+            return
+
+        value = 1 if action == 'vouch' else -1
+        new_score = await self.update_score(interaction.guild_id, target_id, value)
         
         if new_score is None:
             await interaction.response.send_message("Database error processing request.", ephemeral=True)
             return
 
         # Log via Cog method
-        target_user = await self.bot.fetch_user(self.target_id)
-        requester = await self.bot.fetch_user(self.user_id)
-        await Vouches.log_action(self.bot, interaction.guild, target_user, requester, self.action, new_score, self.reason, self.proof_urls, interaction.user)
+        target_user = await self.bot.fetch_user(target_id)
+        requester = await self.bot.fetch_user(requester_id)
+        await Vouches.log_action(self.bot, interaction.guild, target_user, requester, action, new_score, reason, proof_urls, interaction.user)
         
         # Notify Requester
         try:
-            await requester.send(f"✅ Your {self.action} request for user ID {self.target_id} has been approved.")
+            await requester.send(f"✅ Your {action} request for user ID {target_id} has been approved.")
         except:
             pass
 
-        # Disable buttons
-        for item in self.children:
+        # Disable buttons (Create new view to avoid acting on singleton)
+        view = VouchRequestView(self.bot)
+        for item in view.children:
             item.disabled = True
         
-        await interaction.response.edit_message(content=f"✅ Request APPROVED by {interaction.user.mention}", view=self)
+        await interaction.response.edit_message(content=f"✅ Request APPROVED by {interaction.user.mention}", view=view)
 
     @discord.ui.button(label="Deny", style=discord.ButtonStyle.red, custom_id="vouch_deny")
     async def deny(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message("❌ Only admins can assume this action.", ephemeral=True)
+            return
+
+        embed = interaction.message.embeds[0]
+        requester_id, target_id, action, _, _ = self.get_info_from_embed(embed)
+
         # Notify Requester
         try:
-            user = await self.bot.fetch_user(self.user_id)
-            await user.send(f"❌ Your {self.action} request for user ID {self.target_id} has been denied.")
+            user = await self.bot.fetch_user(requester_id)
+            await user.send(f"❌ Your {action} request for user ID {target_id} has been denied.")
         except:
             pass
             
         # Disable buttons
-        for item in self.children:
+        view = VouchRequestView(self.bot)
+        for item in view.children:
             item.disabled = True
             
-        await interaction.response.edit_message(content=f"❌ Request DENIED by {interaction.user.mention}", view=self)
+        await interaction.response.edit_message(content=f"❌ Request DENIED by {interaction.user.mention}", view=view)
 
 class Vouches(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        self.bot.add_view(VouchRequestView(bot))
 
     def get_connection(self):
         return db.get_connection()
@@ -104,9 +148,18 @@ class Vouches(commands.Cog):
     async def log_action(bot, guild, target_user, requester, action, new_score, reason, proof_urls, moderator):
         config = Vouches.load_config()
         guild_id_str = str(guild.id)
-        if guild_id_str in config and 'log_channel' in config[guild_id_str]:
-            channel_id = config[guild_id_str]['log_channel']
-            channel = guild.get_channel(channel_id)
+        if guild_id_str in config:
+            # Determine channel key based on action
+            if action == 'vouch':
+                key = 'vouch_log_channel'
+            elif action == 'unvouch':
+                key = 'unvouch_log_channel'
+            else:
+                key = 'log_channel' # Fallback
+            
+            if key in config[guild_id_str]:
+                channel_id = config[guild_id_str][key]
+                channel = guild.get_channel(channel_id)
             if channel:
                 embed = discord.Embed(
                     title="Vouch Action Log",
@@ -123,70 +176,106 @@ class Vouches(commands.Cog):
                 
                 await channel.send(embed=embed)
 
-    @commands.group(invoke_without_command=True)
+    @commands.command(name='vouch_log')
     @commands.has_permissions(administrator=True)
     async def vouch_log(self, ctx, channel: discord.TextChannel):
-        """Sets the log channel for approved vouches."""
+        """Sets the log channel for approved VOUCHES."""
         config = self.load_config()
         guild_id = str(ctx.guild.id)
         
         if guild_id not in config:
             config[guild_id] = {}
         
-        config[guild_id]['log_channel'] = channel.id
+        config[guild_id]['vouch_log_channel'] = channel.id
         self.save_config(config)
         await ctx.send(f"✅ Vouch logs will be sent to {channel.mention}")
 
-    @commands.command(name='vouch')
+    @commands.command(name='unvouch_log')
     @commands.has_permissions(administrator=True)
+    async def unvouch_log(self, ctx, channel: discord.TextChannel):
+        """Sets the log channel for approved UNVOUCHES."""
+        config = self.load_config()
+        guild_id = str(ctx.guild.id)
+        
+        if guild_id not in config:
+            config[guild_id] = {}
+        
+        config[guild_id]['unvouch_log_channel'] = channel.id
+        self.save_config(config)
+        await ctx.send(f"✅ Unvouch logs will be sent to {channel.mention}")
+
+    @commands.command(name='vouch')
     async def vouch(self, ctx, user: discord.User):
-        """Vouches for a user (Admin)."""
-        conn = self.get_connection()
-        if not conn: return
-        try:
-            cur = conn.cursor()
-            cur.execute("INSERT INTO vouches (user_id, score) VALUES (%s, 1) ON CONFLICT (user_id) DO UPDATE SET score = vouches.score + 1 RETURNING score", (user.id,))
-            new_score = cur.fetchone()[0]
-            conn.commit()
-            
-            await ctx.send(embed=discord.Embed(title="✅ User Vouched", description=f"Vouched for {user.mention}. Score: **{new_score}**", color=discord.Color.green()))
-            
-            # Log it
-            await self.log_action(self.bot, ctx.guild, user, ctx.author, 'vouch', new_score, "Admin Command Usage", [], ctx.author)
-            
-        except Exception as e:
-            await ctx.send(f"Error: {e}", delete_after=3)
-        finally:
-            conn.close()
+        """
+        Vouches for a user.
+        - Admins: Instantly applied.
+        - Users: Starts a vouch request.
+        """
+        if ctx.author.guild_permissions.administrator:
+            # Admin Flow: Instant Vouch
+            conn = self.get_connection()
+            if not conn:
+                await ctx.send("❌ Database Error: Could not connect to database.")
+                return
+            try:
+                cur = conn.cursor()
+                cur.execute("INSERT INTO vouches (user_id, score) VALUES (%s, 1) ON CONFLICT (user_id) DO UPDATE SET score = vouches.score + 1 RETURNING score", (user.id,))
+                new_score = cur.fetchone()[0]
+                conn.commit()
+                
+                await ctx.send(embed=discord.Embed(title="✅ User Vouched", description=f"Vouched for {user.mention}. Score: **{new_score}**", color=discord.Color.green()))
+                
+                # Log it
+                await self.log_action(self.bot, ctx.guild, user, ctx.author, 'vouch', new_score, "Admin Command Usage", [], ctx.author)
+                
+            except Exception as e:
+                await ctx.send(f"Error: {e}", delete_after=3)
+            finally:
+                conn.close()
+        else:
+            # User Flow: Request Vouch
+            await self.handle_request_flow(ctx, user, 'req_channel', 'vouch')
 
     @commands.command(name='unvouch')
-    @commands.has_permissions(administrator=True)
     async def unvouch(self, ctx, user: discord.User):
-        """Unvouches a user (Admin)."""
-        conn = self.get_connection()
-        if not conn: return
-        try:
-            cur = conn.cursor()
-            cur.execute("INSERT INTO vouches (user_id, score) VALUES (%s, -1) ON CONFLICT (user_id) DO UPDATE SET score = vouches.score - 1 RETURNING score", (user.id,))
-            new_score = cur.fetchone()[0]
-            conn.commit()
-            
-            await ctx.send(embed=discord.Embed(title="🔻 User Unvouched", description=f"Unvouched {user.mention}. Score: **{new_score}**", color=discord.Color.red()))
-            
-            # Log it
-            await self.log_action(self.bot, ctx.guild, user, ctx.author, 'unvouch', new_score, "Admin Command Usage", [], ctx.author)
+        """
+        Unvouches a user.
+        - Admins: Instantly applied.
+        - Users: Starts an unvouch request.
+        """
+        if ctx.author.guild_permissions.administrator:
+            # Admin Flow: Instant Unvouch
+            conn = self.get_connection()
+            if not conn:
+                await ctx.send("❌ Database Error: Could not connect to database.")
+                return
+            try:
+                cur = conn.cursor()
+                cur.execute("INSERT INTO vouches (user_id, score) VALUES (%s, -1) ON CONFLICT (user_id) DO UPDATE SET score = vouches.score - 1 RETURNING score", (user.id,))
+                new_score = cur.fetchone()[0]
+                conn.commit()
+                
+                await ctx.send(embed=discord.Embed(title="🔻 User Unvouched", description=f"Unvouched {user.mention}. Score: **{new_score}**", color=discord.Color.red()))
+                
+                # Log it
+                await self.log_action(self.bot, ctx.guild, user, ctx.author, 'unvouch', new_score, "Admin Command Usage", [], ctx.author)
 
-        except Exception as e:
-            await ctx.send(f"Error: {e}", delete_after=3)
-        finally:
-            conn.close()
+            except Exception as e:
+                await ctx.send(f"Error: {e}", delete_after=3)
+            finally:
+                conn.close()
+        else:
+             # User Flow: Request Unvouch
+            await self.handle_request_flow(ctx, user, 'req_channel', 'unvouch')
 
     @commands.command(name='vouch_status', aliases=['v_st'])
     async def vouch_status(self, ctx, user: discord.User = None):
         """Check vouch score."""
         if user is None: user = ctx.author
         conn = self.get_connection()
-        if not conn: return
+        if not conn:
+             await ctx.send("❌ Database Error: Could not connect to database.")
+             return
         try:
             cur = conn.cursor()
             cur.execute("SELECT score FROM vouches WHERE user_id = %s", (user.id,))
@@ -271,73 +360,20 @@ class Vouches(commands.Cog):
              if proof_urls[0].lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.webp')):
                 embed.set_image(url=proof_urls[0])
         
-        view = VouchRequestView(self.bot, ctx.author.id, target_user.id, action_name, reason_text, proof_urls)
+        view = VouchRequestView(self.bot)
         await req_channel.send(embed=embed, view=view)
         await dm.send("✅ Request submitted successfully!")
 
-    @commands.command(name='vouch_req')
-    async def vouch_req(self, ctx, target):
-        """
-        Request a vouch for a user OR set the request channel (Admin).
-        Usage: 
-         - User: ?vouch_req @User
-         - Admin: ?vouch_req #channel
-        """
-        # Try converting to Member
-        try:
-            target_user = await commands.MemberConverter().convert(ctx, target)
-            await self.handle_request_flow(ctx, target_user, 'req_channel', 'vouch')
-            return
-        except commands.MemberNotFound:
-            pass # Not a member
-        
-        # Try converting to Channel (Admin Config)
-        if ctx.author.guild_permissions.administrator:
-            try:
-                channel = await commands.TextChannelConverter().convert(ctx, target)
-                config = self.load_config()
-                guild_id = str(ctx.guild.id)
-                if guild_id not in config: config[guild_id] = {}
-                config[guild_id]['req_channel'] = channel.id
-                self.save_config(config)
-                await ctx.send(f"✅ Vouch/Unvouch requests will be sent to {channel.mention}")
-                return
-            except commands.ChannelNotFound:
-                pass
-        
-        await ctx.send("Invalid usage. @Mention a user to request, or #Channel to configure (Admin only).", delete_after=3)
-
-    @commands.command(name='unvouch_req')
-    async def unvouch_req(self, ctx, target):
-        """
-        Request an unvouch for a user OR set the request channel (Admin).
-        Usage: 
-         - User: ?unvouch_req @User
-         - Admin: ?unvouch_req #channel
-        """
-        # Try converting to Member
-        try:
-            target_user = await commands.MemberConverter().convert(ctx, target)
-            await self.handle_request_flow(ctx, target_user, 'req_channel', 'unvouch')
-            return
-        except commands.MemberNotFound:
-            pass
-        
-        # Try converting to Channel (Admin Config)
-        if ctx.author.guild_permissions.administrator:
-            try:
-                channel = await commands.TextChannelConverter().convert(ctx, target)
-                config = self.load_config()
-                guild_id = str(ctx.guild.id)
-                if guild_id not in config: config[guild_id] = {}
-                config[guild_id]['req_channel'] = channel.id
-                self.save_config(config)
-                await ctx.send(f"✅ Vouch/Unvouch requests will be sent to {channel.mention}")
-                return
-            except commands.ChannelNotFound:
-                pass
-
-        await ctx.send("Invalid usage. @Mention a user to request, or #Channel to configure (Admin only).", delete_after=3)
+    @commands.command(name='vouch_req_log')
+    @commands.has_permissions(administrator=True)
+    async def vouch_req_log(self, ctx, channel: discord.TextChannel):
+        """Sets the channel where vouch/unvouch REQUESTS will be sent."""
+        config = self.load_config()
+        guild_id = str(ctx.guild.id)
+        if guild_id not in config: config[guild_id] = {}
+        config[guild_id]['req_channel'] = channel.id
+        self.save_config(config)
+        await ctx.send(f"✅ Vouch/Unvouch requests will be sent to {channel.mention}")
 
 async def setup(bot):
     await bot.add_cog(Vouches(bot))

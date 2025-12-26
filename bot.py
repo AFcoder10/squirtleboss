@@ -46,6 +46,13 @@ async def main():
                 if filename.endswith('.py'):
                     await bot.load_extension(f'admincommands.{filename[:-3]}')
                     print(f'Loaded extension: admincommands.{filename}')
+
+        # Load extensions from functions
+        if os.path.exists('./functions'):
+            for filename in os.listdir('./functions'):
+                if filename.endswith('.py'):
+                    await bot.load_extension(f'functions.{filename[:-3]}')
+                    print(f'Loaded extension: functions.{filename}')
         
         await bot.start(TOKEN)
 
