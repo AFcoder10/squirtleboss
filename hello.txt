@@ -1,1 +1,1 @@
-ft testa
+ft test
