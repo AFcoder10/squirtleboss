@@ -1,29 +1,26 @@
-name: Deploy to EC2
+name: Deploy to Amazon Linux 2023
+
 on:
   push:
-    branches: [ main ]
+    branches:
+      - main  # Only deploy when you push to main
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Deploy
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USER }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          script: |
-            sudo mkdir -p /opt/squirtleboss
-            sudo chown ec2-user:ec2-user /opt/squirtleboss
-            
-            cd /opt/squirtleboss
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-            if [ ! -d .git ]; then
-              git clone https://github.com/AFcoder10/squirtleboss.git .
-              echo "Fresh clone into /opt/squirtleboss"
-            else
-              git fetch origin
-              git reset --hard origin/main
-              echo "Updated repo in /opt/squirtleboss"
-            fi
+      # Step 1: Upload files to the home directory
+      - name: Copy files via SCP
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.HOST_DNS }}
+          username: ec2-user
+          key: ${{ secrets.EC2_SSH_KEY }}
+          port: 22
+          source: "."
+          # This puts everything inside /home/ec2-user/app
+          target: "/home/ec2-user/app" 
+          strip_components: 0
