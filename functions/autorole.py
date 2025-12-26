@@ -15,13 +15,15 @@ class AutoRole(commands.Cog):
             if role:
                 try:
                     await member.add_roles(role)
-                    print(f"AutoRole: Assigned role {role.name} to {member.name} in {member.guild.name}")
+                    print(f"[AutoRole] SUCCESS: Assigned role '{role.name}' to {member.name} (ID: {member.id}) in {member.guild.name}")
                 except discord.Forbidden:
-                    print(f"AutoRole: Failed to assign role (Missing Permissions) in {member.guild.name}")
+                    print(f"[AutoRole] ERROR: Missing Permissions to assign role '{role.name}' in {member.guild.name}. Check Bot Role Hierarchy.")
                 except Exception as e:
-                    print(f"AutoRole: Error assigning role: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    print(f"[AutoRole] ERROR: {e}")
             else:
-                 print(f"AutoRole: Role ID {ROLE_ID} not found in guild {member.guild.name}")
+                 print(f"[AutoRole] ERROR: Role ID {ROLE_ID} not found in guild {member.guild.name}")
 
 async def setup(bot):
     await bot.add_cog(AutoRole(bot))
