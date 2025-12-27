@@ -11,6 +11,7 @@ TOKEN = os.getenv('DISCORD_TOKEN')
 # Define intents
 intents = discord.Intents.default()
 intents.message_content = True
+intents.members = True
 
 # Ensure data directory exists
 os.makedirs('data', exist_ok=True)
