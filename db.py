@@ -3,7 +3,7 @@ import psycopg2
 DB_HOST = "localhost"
 DB_NAME = "postgres"
 DB_USER = "postgres"
-DB_PASS = "meow"
+DB_PASS = "Meowing"
 DB_PORT = 5432
 
 def get_connection():
