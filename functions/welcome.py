@@ -252,7 +252,7 @@ class Welcome(commands.Cog):
         else:
             await ctx.send("❌ Failed to save to database.")
 
-    @commands.command(name='testwelcome')
+    @commands.command(name='testwelcome', hidden=True)
     async def testwelcome(self, ctx, member: discord.Member = None):
         """Tests the welcome image generation."""
         if ctx.author.id != 688983124868202496:
