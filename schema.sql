@@ -44,3 +44,40 @@ CREATE TABLE IF NOT EXISTS vouches (
     user_id BIGINT PRIMARY KEY,
     score INTEGER DEFAULT 0
 );
+
+CREATE TABLE IF NOT EXISTS giveaways (
+    message_id BIGINT PRIMARY KEY,
+    channel_id BIGINT,
+    guild_id BIGINT,
+    host_id BIGINT,
+    title TEXT,
+    prize TEXT,
+    winners INT,
+    end_time BIGINT,
+    status TEXT,
+    gw_id TEXT UNIQUE
+);
+
+CREATE TABLE IF NOT EXISTS giveaway_participants (
+    message_id BIGINT,
+    user_id BIGINT,
+    PRIMARY KEY (message_id, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS autoroles (
+    guild_id BIGINT PRIMARY KEY,
+    role_id BIGINT
+);
+
+CREATE TABLE IF NOT EXISTS welcome_config (
+    guild_id BIGINT PRIMARY KEY,
+    channel_id BIGINT
+);
+
+CREATE TABLE IF NOT EXISTS vouch_config (
+    guild_id BIGINT PRIMARY KEY,
+    log_channel BIGINT,
+    req_channel BIGINT,
+    vouch_log_channel BIGINT,
+    unvouch_log_channel BIGINT
+);

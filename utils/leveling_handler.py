@@ -239,11 +239,6 @@ def set_user_xp(guild_id, user_id, xp_amount):
         # But wait, `setxp` implies setting the progress.
         
         # Let's just set the raw value.
-        lc = row[1] if row else 1 # Keep current level or default 1
-        
-        # But wait, we need `row` to know current level if we are just updating XP.
-        # We need to fetch it first if we didn't above (we didn't).
-        
         # Fetch current level
         cur.execute("SELECT level FROM levels WHERE guild_id = %s AND user_id = %s", (guild_id, user_id))
         r = cur.fetchone()

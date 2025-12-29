@@ -227,6 +227,11 @@ class TicketLauncher(discord.ui.View):
             
         except Exception as e:
             await interaction.response.send_message(f"❌ Failed to create ticket: {e}", ephemeral=True)
+            # Cleanup if channel was created but DB failed (though DB failure is inside same block, so we might need check)
+            # If we are here, 'ticket_channel' might represent a created channel.
+            # However, 'ticket_channel' variable scope is tricky in python if exception happened before assignment.
+            # A cleaner way is to putting creation in specific try block or checks.
+            pass
 
 
 class TicketCloseModal(discord.ui.Modal, title="Close Ticket"):

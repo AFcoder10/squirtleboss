@@ -1,29 +1,42 @@
 import discord
 from discord.ext import commands
-import json
-import os
 from PIL import Image, ImageDraw, ImageFont, ImageOps, ImageFilter
 from io import BytesIO
-import aiohttp
-
-CONFIG_FILE = 'data/welcome_config.json'
+import db
 
 class Welcome(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @staticmethod
-    def load_config():
-        if os.path.exists(CONFIG_FILE):
-            with open(CONFIG_FILE, 'r') as f:
-                return json.load(f)
-        return {}
+    def get_channel_id(self, guild_id):
+        conn = db.get_connection()
+        if not conn: return None
+        try:
+            with conn.cursor() as cur:
+                cur.execute("SELECT channel_id FROM welcome_config WHERE guild_id = %s", (guild_id,))
+                row = cur.fetchone()
+                return row[0] if row else None
+        finally:
+            conn.close()
 
-    @staticmethod
-    def save_config(config):
-        os.makedirs('data', exist_ok=True)
-        with open(CONFIG_FILE, 'w') as f:
-            json.dump(config, f, indent=4)
+    def set_channel_id(self, guild_id, channel_id):
+        conn = db.get_connection()
+        if not conn: return False
+        try:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    INSERT INTO welcome_config (guild_id, channel_id) 
+                    VALUES (%s, %s) 
+                    ON CONFLICT (guild_id) 
+                    DO UPDATE SET channel_id = %s
+                """, (guild_id, channel_id, channel_id))
+            conn.commit()
+            return True
+        except Exception as e:
+            print(f"DB Error setting welcome: {e}")
+            return False
+        finally:
+            conn.close()
 
     async def generate_welcome_image(self, member):
         # 1. Load Background
@@ -54,8 +67,7 @@ class Welcome(commands.Cog):
         avatar_circular = ImageOps.fit(avatar_image, mask.size, centering=(0.5, 0.5))
         avatar_circular.putalpha(mask)
 
-        # 4. Paste Avatar (Center) - Adjust coordinates as needed for your specific BG
-        # Assuming BG is roughly 1920x1080 or similar. Centering calculation:
+        # 4. Paste Avatar (Center)
         bg_w, bg_h = background.size
         av_w, av_h = avatar_circular.size
         # Center horizontally, slightly above center vertically
@@ -83,7 +95,6 @@ class Welcome(commands.Cog):
         count_text = f"Member #{member_count}"
         
         draw = ImageDraw.Draw(background) 
-        # (We use this just for textbbox, actual drawing happens later)
         
         bbox_user = draw.textbbox((0, 0), username, font=font_large)
         w_user = bbox_user[2] - bbox_user[0]
@@ -99,7 +110,7 @@ class Welcome(commands.Cog):
         
         # Determine Glass Box Size
         content_w = max(250, w_user, w_s, w_d, w_c) + 100 # Min 250 (avatar) + padding
-        content_h = 250 + 20 + 80 + 30 + 40 + 30 + 40 + 30 + 40 + 50 # Added height for count
+        # content_h = 250 + 20 + 80 + 30 + 40 + 30 + 40 + 30 + 40 + 50 # Added height for count
         
         # Calculate Box Coordinates
         box_w = content_w + 100
@@ -111,11 +122,8 @@ class Welcome(commands.Cog):
         box_y2 = box_y1 + box_h
         
         # 6. Create Frosted Glass Effect
-        # Crop background
         crop = background.crop((box_x1, box_y1, box_x2, box_y2))
-        # Blur
         blur = crop.filter(ImageFilter.GaussianBlur(radius=10))
-        # White Overlay
         overlay = Image.new('RGBA', blur.size, (255, 255, 255, 100))
         glass = Image.alpha_composite(blur, overlay)
         
@@ -132,7 +140,6 @@ class Welcome(commands.Cog):
         
         # 7b. Paste Cover Logo (Bottom Right)
         if cover:
-            # Bottom Right coordinates: (Background Width - Logo Width - Padding)
             logo_x = bg_w - cover.size[0] - 5 
             logo_y = bg_h - cover.size[1] - 5
             background.paste(cover, (logo_x, logo_y), cover)
@@ -155,10 +162,9 @@ class Welcome(commands.Cog):
 
     @commands.Cog.listener()
     async def on_member_join(self, member):
-        config = self.load_config()
-        guild_id = str(member.guild.id)
-        if guild_id in config:
-            channel_id = config[guild_id]
+        channel_id = self.get_channel_id(member.guild.id)
+        
+        if channel_id:
             channel = member.guild.get_channel(channel_id)
             if channel:
                 try:
@@ -173,16 +179,15 @@ class Welcome(commands.Cog):
                 except Exception as e:
                     print(f"Error sending welcome message: {e}")
 
-    @commands.command(name='welcome_log')
+    @commands.command(name='welcome_log', hidden=True)
     @commands.has_permissions(administrator=True)
     async def welcome_log(self, ctx, channel: discord.TextChannel):
         """Sets the channel for welcome messages."""
-        config = self.load_config()
-        config[str(ctx.guild.id)] = channel.id
-        self.save_config(config)
-        await ctx.send(f"✅ Welcome messages will be sent to {channel.mention}")
-
-
+        success = self.set_channel_id(ctx.guild.id, channel.id)
+        if success:
+            await ctx.send(f"✅ Welcome messages will be sent to {channel.mention}")
+        else:
+            await ctx.send("❌ Failed to save to database.")
 
 async def setup(bot):
     await bot.add_cog(Welcome(bot))

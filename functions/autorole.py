@@ -1,35 +1,52 @@
 import discord
 from discord.ext import commands
-import json
-import os
 import traceback
-
-CONFIG_FILE = 'data/autorole_config.json'
+import db
 
 class AutoRole(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @staticmethod
-    def load_config():
-        if os.path.exists(CONFIG_FILE):
-            with open(CONFIG_FILE, 'r') as f:
-                return json.load(f)
-        return {}
+    def get_role_id(self, guild_id):
+        conn = db.get_connection()
+        if not conn:
+            return None
+        try:
+            with conn.cursor() as cur:
+                cur.execute("SELECT role_id FROM autoroles WHERE guild_id = %s", (guild_id,))
+                row = cur.fetchone()
+                return row[0] if row else None
+        except Exception as e:
+            print(f"DB Error getting autorole: {e}")
+            return None
+        finally:
+            conn.close()
 
-    @staticmethod
-    def save_config(config):
-        os.makedirs('data', exist_ok=True)
-        with open(CONFIG_FILE, 'w') as f:
-            json.dump(config, f, indent=4)
+    def set_role_id(self, guild_id, role_id):
+        conn = db.get_connection()
+        if not conn:
+            return False
+        try:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    INSERT INTO autoroles (guild_id, role_id) 
+                    VALUES (%s, %s) 
+                    ON CONFLICT (guild_id) 
+                    DO UPDATE SET role_id = %s
+                """, (guild_id, role_id, role_id))
+            conn.commit()
+            return True
+        except Exception as e:
+            print(f"DB Error setting autorole: {e}")
+            return False
+        finally:
+            conn.close()
 
     @commands.Cog.listener()
     async def on_member_join(self, member):
-        config = self.load_config()
-        guild_id = str(member.guild.id)
+        role_id = self.get_role_id(member.guild.id)
         
-        if guild_id in config:
-            role_id = config[guild_id]
+        if role_id:
             role = member.guild.get_role(role_id)
             if role:
                 try:
@@ -43,14 +60,15 @@ class AutoRole(commands.Cog):
             else:
                  print(f"[AutoRole] ERROR: Configured Role ID {role_id} not found in guild {member.guild.name}")
 
-    @commands.command(name='autorole')
+    @commands.command(name='autorole', hidden=True)
     @commands.has_permissions(administrator=True)
     async def autorole(self, ctx, role: discord.Role):
         """Sets the role to be automatically assigned to new members."""
-        config = self.load_config()
-        config[str(ctx.guild.id)] = role.id
-        self.save_config(config)
-        await ctx.send(f"✅ AutoRole set to {role.name} ({role.id})")
+        success = self.set_role_id(ctx.guild.id, role.id)
+        if success:
+            await ctx.send(f"✅ AutoRole set to {role.name} ({role.id})")
+        else:
+            await ctx.send("❌ Failed to save to database.")
 
 async def setup(bot):
     await bot.add_cog(AutoRole(bot))
