@@ -58,21 +58,21 @@ class VouchRequestView(discord.ui.View):
     @discord.ui.button(label="Approve", style=discord.ButtonStyle.green, custom_id="vouch_approve")
     async def approve(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not interaction.user.guild_permissions.administrator:
-            await interaction.response.send_message("❌ Only admins can assume this action.", ephemeral=True)
+            await interaction.response.send_message(embed=discord.Embed(description="❌ Only admins can assume this action.", color=discord.Color.red()), ephemeral=True)
             return
 
         embed = interaction.message.embeds[0]
         requester_id, target_id, action, reason, proof_urls = self.get_info_from_embed(embed)
         
         if not requester_id or not target_id:
-            await interaction.response.send_message("❌ Error parsing request data.", ephemeral=True)
+            await interaction.response.send_message(embed=discord.Embed(description="❌ Error parsing request data.", color=discord.Color.red()), ephemeral=True)
             return
 
         value = 1 if action == 'vouch' else -1
         new_score = await self.update_score(interaction.guild_id, target_id, value)
         
         if new_score is None:
-            await interaction.response.send_message("Database error processing request.", ephemeral=True)
+            await interaction.response.send_message(embed=discord.Embed(description="Database error processing request.", color=discord.Color.red()), ephemeral=True)
             return
 
         # Log via Cog method
@@ -82,7 +82,7 @@ class VouchRequestView(discord.ui.View):
         
         # Notify Requester
         try:
-            await requester.send(f"✅ Your {action} request for user ID {target_id} has been approved.")
+            await requester.send(embed=discord.Embed(description=f"✅ Your {action} request for user ID {target_id} has been approved.", color=discord.Color.green()))
         except:
             pass
 
@@ -96,7 +96,7 @@ class VouchRequestView(discord.ui.View):
     @discord.ui.button(label="Deny", style=discord.ButtonStyle.red, custom_id="vouch_deny")
     async def deny(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not interaction.user.guild_permissions.administrator:
-            await interaction.response.send_message("❌ Only admins can assume this action.", ephemeral=True)
+            await interaction.response.send_message(embed=discord.Embed(description="❌ Only admins can assume this action.", color=discord.Color.red()), ephemeral=True)
             return
 
         embed = interaction.message.embeds[0]
@@ -104,7 +104,7 @@ class VouchRequestView(discord.ui.View):
 
         try:
             user = await self.bot.fetch_user(requester_id)
-            await user.send(f"❌ Your {action} request for user ID {target_id} has been denied.")
+            await user.send(embed=discord.Embed(description=f"❌ Your {action} request for user ID {target_id} has been denied.", color=discord.Color.red()))
         except:
             pass
             
@@ -229,7 +229,7 @@ class Vouches(commands.Cog):
         if ctx.author.guild_permissions.administrator:
             conn = db.get_connection()
             if not conn:
-                await ctx.send("❌ Database Error.")
+                await ctx.send(embed=discord.Embed(description="❌ Database Error.", color=discord.Color.red()))
                 return
             try:
                 cur = conn.cursor()
@@ -249,7 +249,7 @@ class Vouches(commands.Cog):
         if ctx.author.guild_permissions.administrator:
             conn = db.get_connection()
             if not conn:
-                await ctx.send("❌ Database Error.")
+                await ctx.send(embed=discord.Embed(description="❌ Database Error.", color=discord.Color.red()))
                 return
             try:
                 cur = conn.cursor()
@@ -283,27 +283,27 @@ class Vouches(commands.Cog):
 
     async def handle_request_flow(self, ctx, target_user, link_channel_key, action_name):
         if target_user.id == ctx.author.id:
-            await ctx.send("❌ You cannot request a vouch/unvouch for yourself.", delete_after=3)
+            await ctx.send(embed=discord.Embed(description="❌ You cannot request a vouch/unvouch for yourself.", color=discord.Color.red()), delete_after=3)
             return
 
         config = self.get_config(ctx.guild.id) or {}
         if link_channel_key not in config or not config[link_channel_key]:
-            await ctx.send("❌ Request channel not configured.", delete_after=3)
+            await ctx.send(embed=discord.Embed(description="❌ Request channel not configured.", color=discord.Color.red()), delete_after=3)
             return
 
         req_channel = ctx.guild.get_channel(config[link_channel_key])
         if not req_channel:
-            await ctx.send("❌ Request channel invalid.", delete_after=3)
+            await ctx.send(embed=discord.Embed(description="❌ Request channel invalid.", color=discord.Color.red()), delete_after=3)
             return
 
         try:
             dm = await ctx.author.create_dm()
-            await dm.send(f"You initiated a **{action_name}** request for **{target_user.name}**.\nReply with REASON and PROOF.\nType `done` when finished.")
+            await dm.send(embed=discord.Embed(description=f"You initiated a **{action_name}** request for **{target_user.name}**.\nReply with REASON and PROOF.\nType `done` when finished.", color=discord.Color.blue()))
         except discord.Forbidden:
-            await ctx.send("❌ I cannot DM you.", delete_after=3)
+            await ctx.send(embed=discord.Embed(description="❌ I cannot DM you.", color=discord.Color.red()), delete_after=3)
             return
 
-        await ctx.send(f"📩 Check your DMs.")
+        await ctx.send(embed=discord.Embed(description=f"📩 Check your DMs.", color=discord.Color.blue()))
 
         evidence_msgs = []
         proof_urls = []
@@ -315,14 +315,14 @@ class Vouches(commands.Cog):
                 msg = await self.bot.wait_for('message', check=check, timeout=300)
                 if msg.content.lower() == 'done':
                     if not evidence_msgs and not proof_urls:
-                        await dm.send("Request cancelled.")
+                        await dm.send(embed=discord.Embed(description="Request cancelled.", color=discord.Color.red()))
                         return
                     break
                 if msg.content: evidence_msgs.append(msg.content)
                 for att in msg.attachments: proof_urls.append(att.url)
                 await msg.add_reaction('✅')
             except asyncio.TimeoutError:
-                await dm.send("Timed out.")
+                await dm.send(embed=discord.Embed(description="Timed out.", color=discord.Color.red()))
                 return
 
         reason_text = "\n".join(evidence_msgs) if evidence_msgs else "No text provided"
@@ -341,7 +341,7 @@ class Vouches(commands.Cog):
         
         view = VouchRequestView(self.bot)
         await req_channel.send(embed=embed, view=view)
-        await dm.send("✅ Request submitted successfully!")
+        await dm.send(embed=discord.Embed(description="✅ Request submitted successfully!", color=discord.Color.green()))
 
     @commands.command(name='vouch_req_log', hidden=True)
     @commands.has_permissions(administrator=True)
