@@ -41,9 +41,9 @@ class Welcome(commands.Cog):
     async def generate_welcome_image(self, member):
         # 1. Load Background
         try:
-            background = Image.open("welcome-bg.png").convert("RGBA")
+            background = Image.open("static/welcome-bg.png").convert("RGBA")
         except:
-            print("Error: welcome-bg.png not found")
+            print("Error: static/welcome-bg.png not found")
             return None
 
         # 2. Get Avatar
@@ -53,11 +53,11 @@ class Welcome(commands.Cog):
 
         # 2b. Load Cover Image (Logo)
         try:
-            cover = Image.open("cover.png").convert("RGBA")
+            cover = Image.open("static/cover.png").convert("RGBA")
             # Resize to small logo (e.g., 150x150 or whatever covers the start)
             cover = cover.resize((150, 150))
         except:
-            print("Error: cover.png not found")
+            print("Error: static/cover.png not found")
             cover = None
 
         # 3. Create Circular Mask
@@ -78,8 +78,8 @@ class Welcome(commands.Cog):
 
         # 5. Calculate Layout & Fonts
         try:
-            font_large = ImageFont.truetype("SF-Pro-Display-Regular.otf", 80)
-            font_small = ImageFont.truetype("SF-Pro-Display-Regular.otf", 40)
+            font_large = ImageFont.truetype("static/SF-Pro-Display-Regular.otf", 80)
+            font_small = ImageFont.truetype("static/SF-Pro-Display-Regular.otf", 40)
         except:
              font_large = ImageFont.load_default()
              font_small = ImageFont.load_default()
