@@ -213,8 +213,8 @@ class Welcome(commands.Cog):
         
         # 10. Paste Cover Logo (Bottom Right)
         if cover:
-            logo_x = bg_w - cover.size[0] - 20
-            logo_y = bg_h - cover.size[1] - 20
+            logo_x = bg_w - cover.size[0] - 5
+            logo_y = bg_h - cover.size[1] - 5
             background.paste(cover, (logo_x, logo_y), cover)
 
         # 11. Save
